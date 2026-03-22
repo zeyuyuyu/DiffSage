@@ -2,57 +2,66 @@ import os
 import difflib
 
 class DiffAnalyzer:
-    def __init__(self, repo_path):
-        self.repo_path = repo_path
+    def __init__(self, file1, file2):
+        self.file1 = file1
+        self.file2 = file2
 
-    def analyze_diff(self, base_ref, compare_ref):
-        """Analyze the difference between two Git references."""
-        base_files = self._get_file_list(base_ref)
-        compare_files = self._get_file_list(compare_ref)
+    def analyze_diff(self):
+        """Analyzes the difference between two files and returns a detailed report."""
+        with open(self.file1, 'r') as f1, open(self.file2, 'r') as f2:
+            file1_lines = f1.readlines()
+            file2_lines = f2.readlines()
 
-        diff_report = []
-
-        for file in base_files:
-            if file in compare_files:
-                base_content = self._get_file_content(base_ref, file)
-                compare_content = self._get_file_content(compare_ref, file)
-                file_diff = self._generate_diff(base_content, compare_content)
-                if file_diff:
-                    diff_report.append({
-                        'file': file,
-                        'diff': file_diff
-                    })
-            else:
-                diff_report.append({
-                    'file': file,
-                    'diff': 'File deleted'
-                })
-
-        for file in compare_files:
-            if file not in base_files:
-                diff_report.append({
-                    'file': file,
-                    'diff': 'File added'
-                })
+        diff = difflib.unified_diff(file1_lines, file2_lines, fromfile=self.file1, tofile=self.file2)
+        diff_report = ''.join(diff)
 
         return diff_report
 
-    def _get_file_list(self, ref):
-        """Get the list of files for a given Git reference."""
-        file_list = []
-        for root, dirs, files in os.walk(self.repo_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                file_list.append(file_path.replace(self.repo_path + '/', ''))
-        return file_list
+    def detect_changes(self):
+        """Detects the types of changes between the two files and returns a summary."""
+        with open(self.file1, 'r') as f1, open(self.file2, 'r') as f2:
+            file1_lines = f1.readlines()
+            file2_lines = f2.readlines()
 
-    def _get_file_content(self, ref, file_path):
-        """Get the content of a file for a given Git reference."""
-        file_path = os.path.join(self.repo_path, file_path)
-        with open(file_path, 'r') as file:
-            return file.read()
+        diff = difflib.unified_diff(file1_lines, file2_lines, fromfile=self.file1, tofile=self.file2)
+        diff_lines = list(diff)
 
-    def _generate_diff(self, base_content, compare_content):
-        """Generate a diff between two file contents."""
-        diff = difflib.unified_diff(base_content.splitlines(), compare_content.splitlines())
-        return '\n'.join(diff)
+        changes = {
+            'additions': 0,
+            'deletions': 0,
+            'modifications': 0
+        }
+
+        for line in diff_lines:
+            if line.startswith('+'):
+                changes['additions'] += 1
+            elif line.startswith('-'):
+                changes['deletions'] += 1
+            elif line.startswith(' '):
+                changes['modifications'] += 1
+
+        return changes
+
+    def generate_html_report(self):
+        """Generates an HTML report comparing the two files."""
+        diff_report = self.analyze_diff()
+        changes = self.detect_changes()
+
+        html_report = f"""
+        <html>
+        <head>
+            <title>Diff Report</title>
+        </head>
+        <body>
+            <h1>Diff Report</h1>
+            <h2>Changes Summary</h2>
+            <p>Additions: {changes['additions']}</p>
+            <p>Deletions: {changes['deletions']}</p>
+            <p>Modifications: {changes['modifications']}</p>
+            <h2>Diff Details</h2>
+            <pre>{diff_report}</pre>
+        </body>
+        </html>
+        """
+
+        return html_report
