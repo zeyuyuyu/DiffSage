@@ -1,67 +1,86 @@
-import os
-import difflib
+import re
+from typing import Dict, List, Tuple
 
 class DiffAnalyzer:
-    def __init__(self, file1, file2):
-        self.file1 = file1
-        self.file2 = file2
-
-    def analyze_diff(self):
-        """Analyzes the difference between two files and returns a detailed report."""
-        with open(self.file1, 'r') as f1, open(self.file2, 'r') as f2:
-            file1_lines = f1.readlines()
-            file2_lines = f2.readlines()
-
-        diff = difflib.unified_diff(file1_lines, file2_lines, fromfile=self.file1, tofile=self.file2)
-        diff_report = ''.join(diff)
-
-        return diff_report
-
-    def detect_changes(self):
-        """Detects the types of changes between the two files and returns a summary."""
-        with open(self.file1, 'r') as f1, open(self.file2, 'r') as f2:
-            file1_lines = f1.readlines()
-            file2_lines = f2.readlines()
-
-        diff = difflib.unified_diff(file1_lines, file2_lines, fromfile=self.file1, tofile=self.file2)
-        diff_lines = list(diff)
-
-        changes = {
-            'additions': 0,
-            'deletions': 0,
-            'modifications': 0
+    def __init__(self):
+        self.change_patterns = {
+            'api_change': r'(API|api|endpoint|route)',
+            'security': r'(password|token|secret|auth|crypt)',
+            'database': r'(SELECT|INSERT|UPDATE|DELETE|CREATE TABLE)',
+            'dependency': r'(requirements.txt|package.json|Gemfile|\bdep\b)',
+            'config': r'(config|settings|env|yaml|yml)'
         }
 
-        for line in diff_lines:
-            if line.startswith('+'):
-                changes['additions'] += 1
-            elif line.startswith('-'):
-                changes['deletions'] += 1
-            elif line.startswith(' '):
-                changes['modifications'] += 1
-
+    def parse_diff(self, diff_content: str) -> Dict[str, List[str]]:
+        """Parse git diff content and categorize changes."""
+        lines = diff_content.split('\n')
+        changes = {
+            'files_changed': [],
+            'additions': [],
+            'deletions': [],
+            'critical_changes': []
+        }
+        
+        current_file = ''
+        
+        for line in lines:
+            if line.startswith('diff --git'):
+                current_file = line.split()[-1][2:]
+                changes['files_changed'].append(current_file)
+            elif line.startswith('+') and not line.startswith('+++'):
+                changes['additions'].append(line[1:])
+                self._analyze_critical_change(line[1:], current_file, changes)
+            elif line.startswith('-') and not line.startswith('---'):
+                changes['deletions'].append(line[1:])
+                self._analyze_critical_change(line[1:], current_file, changes)
+                
         return changes
 
-    def generate_html_report(self):
-        """Generates an HTML report comparing the two files."""
-        diff_report = self.analyze_diff()
-        changes = self.detect_changes()
+    def _analyze_critical_change(self, line: str, filename: str, changes: Dict[str, List[str]]):
+        """Analyze if a change is critical based on predefined patterns."""
+        for change_type, pattern in self.change_patterns.items():
+            if re.search(pattern, line, re.IGNORECASE):
+                message = f'{change_type.upper()} change detected in {filename}: {line.strip()}'
+                changes['critical_changes'].append(message)
 
-        html_report = f"""
-        <html>
-        <head>
-            <title>Diff Report</title>
-        </head>
-        <body>
-            <h1>Diff Report</h1>
-            <h2>Changes Summary</h2>
-            <p>Additions: {changes['additions']}</p>
-            <p>Deletions: {changes['deletions']}</p>
-            <p>Modifications: {changes['modifications']}</p>
-            <h2>Diff Details</h2>
-            <pre>{diff_report}</pre>
-        </body>
-        </html>
-        """
+    def generate_summary(self, changes: Dict[str, List[str]]) -> Tuple[str, List[str]]:
+        """Generate a human-readable summary of the changes."""
+        summary = []
+        warnings = []
+        
+        summary.append(f"Files modified: {len(changes['files_changed'])}\n")
+        summary.append(f"Total additions: {len(changes['additions'])}\n")
+        summary.append(f"Total deletions: {len(changes['deletions'])}\n")
+        
+        if changes['critical_changes']:
+            warnings = changes['critical_changes']
+            summary.append("\nCritical changes detected:\n")
+            for warning in warnings:
+                summary.append(f"- {warning}\n")
+                
+        return ''.join(summary), warnings
 
-        return html_report
+    def analyze_impact(self, changes: Dict[str, List[str]]) -> str:
+        """Analyze the potential impact of changes."""
+        impact_level = 'LOW'
+        
+        if any('security' in change.lower() for change in changes['critical_changes']):
+            impact_level = 'HIGH'
+        elif len(changes['critical_changes']) > 3:
+            impact_level = 'MEDIUM'
+        elif len(changes['files_changed']) > 10:
+            impact_level = 'MEDIUM'
+            
+        return impact_level
+
+    def get_file_statistics(self, changes: Dict[str, List[str]]) -> Dict[str, int]:
+        """Get detailed statistics for changed files."""
+        stats = {}
+        
+        for file in changes['files_changed']:
+            stats[file] = {
+                'additions': len([l for l in changes['additions'] if file in l]),
+                'deletions': len([l for l in changes['deletions'] if file in l])
+            }
+            
+        return stats
