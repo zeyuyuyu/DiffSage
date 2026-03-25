@@ -1,23 +1,23 @@
-import spacy
+import difflib
 
 class DiffAnalyzer:
-    def __init__(self):
-        self.nlp = spacy.load('en_core_web_sm')
+    def __init__(self, old_code, new_code):
+        self.old_code = old_code
+        self.new_code = new_code
 
-    def analyze_diff(self, old_text, new_text):
-        """Analyze the semantic differences between two text inputs."""
-        old_doc = self.nlp(old_text)
-        new_doc = self.nlp(new_text)
+    def analyze_semantic_diff(self):
+        """Analyze the semantic differences between the old and new code."""
+        old_lines = self.old_code.split('\
+')
+        new_lines = self.new_code.split('\
+')
 
-        changes = []
-        for token_old, token_new in zip(old_doc, new_doc):
-            if token_old.text != token_new.text:
-                changes.append({
-                    'old': token_old.text,
-                    'new': token_new.text,
-                    'pos': token_new.pos_,
-                    'dep': token_new.dep_,
-                    'lemma': token_new.lemma_
-                })
+        diff = difflib.unified_diff(old_lines, new_lines, fromfile='old_code.py', tofile='new_code.py')
 
-        return changes
+        semantic_diff = []
+        for line in diff:
+            if line.startswith('-') or line.startswith('+'):
+                semantic_diff.append(line)
+
+        return '\
+'.join(semantic_diff)
